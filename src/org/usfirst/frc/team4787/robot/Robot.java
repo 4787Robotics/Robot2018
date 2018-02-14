@@ -1,18 +1,26 @@
 
 package org.usfirst.frc.team4787.robot;
 
-//2017
+//2018
 
 import edu.wpi.first.wpilibj.SampleRobot;
 import edu.wpi.first.wpilibj.Servo;
 import edu.wpi.first.wpilibj.Solenoid;
 import edu.wpi.first.wpilibj.Spark;
 import edu.wpi.first.wpilibj.RobotDrive;
+import edu.wpi.cscore.UsbCamera;
 import edu.wpi.first.wpilibj.CameraServer;
 import edu.wpi.first.wpilibj.Compressor;
+import edu.wpi.first.wpilibj.DoubleSolenoid;
 import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.Timer;
+import edu.wpi.first.wpilibj.buttons.JoystickButton;
+import edu.wpi.first.wpilibj.command.Command;
+import edu.wpi.first.wpilibj.command.InstantCommand;
+import edu.wpi.first.wpilibj.command.Scheduler;
+import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj.Talon;
+import edu.wpi.first.wpilibj.IterativeRobot;
 
 
 
@@ -37,24 +45,41 @@ public class Robot extends SampleRobot {
 	final double DEADZONEX = 0.01, DEADZONEY = 0.01;
 	
     // button configuration
-	final int  GEAR_MECH_DOOR_OPEN = 3, GEAR_MECH_DOOR_CLOSE = 5, DISABLE_CLIMBING_MECH = 4;
-	
+	final int  GEAR_MECH_DOOR_OPEN = 3, GEAR_MECH_DOOR_CLOSE = 5, DISABLE_CLIMBING_MECH = 4, NewBoi = 7, Reduced = 8;
+	/**
+	 * Change configuration for pneumatics/ clear out mechDoor
+	 */
+	boolean speedReduced = false;
+	boolean newnewboi = false;
     // 0 = joystick usb port in driver station
     Joystick stick = new Joystick(2);
     
     // number in parenthesis for Talon, Servo, and Spark constructor are PWM ports on roborio
-    Talon bLeft = new Talon(1);
-    Talon fLeft = new Talon(2);
-    Talon bRight= new Talon(3);
-    Talon fRight = new Talon(4);
-    Servo rightGearDoorServo = new Servo(5);
-    Servo leftGearDoorServo = new Servo(6);
+    Talon bLeft = new Talon(2);
+    Talon fLeft = new Talon(3);
+    Talon bRight= new Talon(1);
+    Talon fRight = new Talon(0);
+//    Servo rightGearDoorServo = new Servo(5);
+//    Servo leftGearDoorServo = new Servo(6);
     Spark climbingMech = new Spark(7);
+    //paramater is nodeid of the solenoids & compressor 
+    DoubleSolenoid sol1 = new DoubleSolenoid(1, 2);
+    Compressor c = new Compressor(0);
+    /*SendableChooser chooser = new SendableChooser();
     
-    // Instantiate the compressor.
-    // TODO Will - See the Robot() constructor. We may not even need this...
-    Compressor c;
-    Solenoid s;
+    chooser.addDefault("Default", new autonomous());
+    
+/*    
+    SendableChooser chooser = new SendableChooser();
+    chooser.addObject(a1, String);
+    chooser.addObject("Autonomous 2", String);
+    chooser.addObject("Autonomous 3", String);
+    chooser.addObject("Autonomous 4", String);
+    chooser.addObject("Autonomous 5", String);
+    chooser.addObject("Autonomous 6", String);
+    String selected = (String) chooser.getSelected();
+    */
+     
     
     //sets up the compressor setting/status
     boolean enabled = c.enabled();
@@ -64,7 +89,7 @@ public class Robot extends SampleRobot {
     // sets RobotDrive obj to null so that auto code works
     RobotDrive arcadeDrive = null;
     
-    // variable to handle initialization of Robot Drive obj
+    // variable to handle initialization of Robot Drive obj//i.e., on or off?
     boolean initRobotDrive;
     
     // String variable to determine auto mode, "L" = left starting position, "M" = middle starting position, "R" = right starting posistion
@@ -77,57 +102,45 @@ public class Robot extends SampleRobot {
      * Constructs Robot object with necessary configurations
      */
     public Robot() {
+    	
     	initRobotDrive = true;
-        autoMode = "M";
-        CameraServer.getInstance().startAutomaticCapture();
-    	Timer.delay(0.05);
+        //CALLS AUTO
+    	autoMode = "M";
+        UsbCamera cam1 = CameraServer.getInstance().startAutomaticCapture(0);
+        //2 for 2 cameras or does just one line handle them both? 
+        UsbCamera cam2 = CameraServer.getInstance().startAutomaticCapture(1);
+       
+      
+        Timer.delay(0.05);
     	climbSpeed = 0;
+    	c.setClosedLoopControl(true);
     	
-    	// TODO Will
-    	//
-    	// !! READ ME !!
-    	//
-    	// It sounds like we don't _need_ a Compressor defined in code. We only really need it if
-    	// we want to read some diagnostic info, or if we want fine grain control over it if battery
-    	// drain is a problem.
-    	//
-    	// https://wpilib.screenstepslive.com/s/currentCS/m/java/l/599707-operating-a-compressor-for-pneumatics
-       	//
-    	// "Creating any instance of a Solenoid or Double Solenoid object will enable the Compressor control on the 
-    	// corresponding PCM. The Compressor object is only needed if you want to have greater control over the 
-    	// compressor or query compressor status."
-    	//
-    	// That seems to imply that you needn't worry about the compressor at all, but you can if you want to.
-    	boolean on = true; // an alias for 'true'
-    	boolean off = false; // an alias for 'false'
-    	
-    	c = new Compressor(0);
-    	// It sounds like closed loop control automatically maintains the pressure for you, which is handy, yeah?
-    	// The alternative being that you manually invoke c.start() or c.stop() to control the compressor. Saves
-    	// battery since it's not always working to keep consistent pressure, but sounds like it's not worth the trade off.
-    	//
-    	// It should be noted that it seems closed loop control mode is on by default, so we shouldn't
-    	// even need to call this, right?
-    	//
-    	c.setClosedLoopControl(on);
-       	// 
-    	// Based on the docs...
-    	//
-    	// https://wpilib.screenstepslive.com/s/currentCS/m/java/l/599707-operating-a-compressor-for-pneumatics
-    	//
-    	// ...it sounds like this would automatically enable the compressor, right? We shouldn't need a Compressor
-    	// variable. Seems we only need to fire the solenoid to open/close, right?
-    	//
-    	// Solenoid solenoid = new Solenoid();
-    	// solenoid.set(on);
+	    JoystickButton pneumaticOpen= new JoystickButton(stick, 9);
+	    JoystickButton pneumaticClose= new JoystickButton(stick, 10);
+	    pneumaticOpen.whenPressed(new InstantCommand(){
+			protected void execute() {
+				System.out.println("pneumatic open");
+		    	sol1.set(DoubleSolenoid.Value.kForward);
+		    	sol1.set(DoubleSolenoid.Value.kOff);
+			}
+	    });
+	    pneumaticClose.whenPressed(new InstantCommand(){
+			protected void execute() {
+				System.out.println("pneumatic close");
+		    	sol1.set(DoubleSolenoid.Value.kReverse);
+		    	sol1.set(DoubleSolenoid.Value.kOff);
+			}
+	    });
+	    
     }
+    
     
     /**
      * Method for robot to cross baseline in auto, causes robot to drive approximate 130 inches (unsure of precise measurement)
      */
     public void crossBaseLine() {
-    	autoPower = 0.4;
-		autoTime = 2;
+    	autoPower = .1;
+		autoTime = 60;
 		bLeft.set(autoPower);
 		fLeft.set(autoPower);
 		bRight.set(-autoPower);
@@ -136,13 +149,18 @@ public class Robot extends SampleRobot {
     }
     
     public void drive(double speed, double time, boolean isReverse) {
-    	speed = isReverse ? -speed : speed;
-    	bLeft.set(speed);
+    	
+    	if(speedReduced){
+    		speed = 0.5*speed;
+    	}
+		speed = isReverse ? -speed : speed;
+		bLeft.set(speed);
 		fLeft.set(speed);
 		bRight.set(-speed);
 		fRight.set(-speed);
 		Timer.delay(time);
     }
+    
     
     /**
      * Method for robot to do a 180 degree turn in auto
@@ -183,11 +201,7 @@ public class Robot extends SampleRobot {
 		Timer.delay(autoTime);
     }
     
-    public void pneumatic(){
-        // TODO Will
-    	//sets Compressor/pneumatic so that when it is on it closed the pressure tube and vice versa when it is off
-    	
-    }
+    
     
     /**
      * AUTONOMOUS
@@ -205,19 +219,20 @@ public class Robot extends SampleRobot {
     		/**
     		 * Case for robot to cross baseline in auto (maybe not tested thoroughly), causes from to drive approximately 80-85 inches (unsure of precise measurement)
     		 */
+    	
     		case "M2":
     			this.drive(0.4, 0.95, false);
     			this.drive(0.2, 0.91, false);
     			this.stopMotors();
     			Timer.delay(1.0);
-    			this.openGearMechDoor();
+//    			this.openGearMechDoor();
     			this.drive(0.1, 1.0, true);
     			this.stopMotors();
-    			this.closeGearMechDoor();
+//    			this.closeGearMechDoor();
     			break;
-    		/**
-    		 * Method for robot to cross baseline in auto, causes robot to drive approximate 130 inches (unsure of precise measurement)
-    		 */
+    		//**
+    		 // Method for robot to cross baseline in auto, causes robot to drive approximate 130 inches (unsure of precise measurement)
+    		 //*
     		case "M3":
     			this.drive(0.4, 2.0, false);
     			this.stopMotors();
@@ -229,12 +244,16 @@ public class Robot extends SampleRobot {
     		default:
     			this.stopMotors();
     			break;
+    	
+    		
     	}		
     }
 
     /**
      * Method to set angles on servos so gear mech doors open
      */
+/*
+  
     public void openGearMechDoor() {
     	// post build season code (might need to be adjusted if we switch servos) 
 		leftGearDoorServo.setAngle(0); //might have to reverse this with the one above
@@ -245,9 +264,11 @@ public class Robot extends SampleRobot {
 //		rightGearDoorServo.setAngle(rightGearDoorServo.getAngle() + 90);
     }
     
+*/
     /**
      * Method to set angles on servos so gear mech doors close
      */
+/*
     public void closeGearMechDoor() {
     	// post build season code (might need to be adjusted if we switch servos)
 		leftGearDoorServo.setAngle(180); //might have to reverse this with the one below
@@ -257,27 +278,52 @@ public class Robot extends SampleRobot {
 //		leftGearDoorServo.setAngle(leftGearDoorServo.getAngle() - 90);
 //		rightGearDoorServo.setAngle(rightGearDoorServo.getAngle() - 90);
     }
+*/
     
     /**
      * TELEOPERATED MODE. Runs the motors with arcade steering.
      */
     public void operatorControl() {
     	// code to initialize RobotDrive in tele op mode
+    	
+    	
+    	
     	if(initRobotDrive || arcadeDrive.equals(null)) {
         	arcadeDrive = new RobotDrive(fLeft, bLeft, fRight, bRight);
         	initRobotDrive = false;
         }
     	// teleop code loop
     	while (isOperatorControl() && isEnabled()) {
-    		// programs motor controllers to drive with exponential arcade drive (i.e. real values are dampened by exponentiation to make driving smoother)
+    		//programs motor controllers to drive with exponential arcade drive (i.e. real values are dampened by exponentiation to make driving smoother)
     		expY = Math.pow(-stick.getY(), 1);
     		expX = Math.pow(-stick.getX(), 1);
     		arcadeDrive.arcadeDrive(expY, expX);
     		
+    		
+    		// y = drivestick.getY();
+             //x = drivestick.getX();
+
+             expX = 0;
+             expY = 0;
+             if (Math.abs(x) > DEADZONEX) {
+                 expX = x * Math.abs(x);
+             } else {
+                 expX = 0;
+             }
+             if (Math.abs(y) > DEADZONEY) {
+                 expY = y;
+             } else {
+                 expY = 0;
+             }
+
+    		
+    		
+    		
     		// retrieves whether our button configurations are pressed down or not
-    		boolean openMechDoor = stick.getRawButton(GEAR_MECH_DOOR_OPEN);
-        	boolean closeMechDoor = stick.getRawButton(GEAR_MECH_DOOR_CLOSE);
+//    		boolean openMechDoor = stick.getRawButton(GEAR_MECH_DOOR_OPEN);
+//        	boolean closeMechDoor = stick.getRawButton(GEAR_MECH_DOOR_CLOSE);
         	boolean disableClimbingMechMotor = stick.getRawButton(DISABLE_CLIMBING_MECH);
+        	//boolean newboidown = stick.getRawButton(NewBoi);
         	
         	// determines whether the POV hat switch is set to correct state to trigger events for climbing
         	boolean accelerateClimbingMech = stick.getPOV() == 0 ? true : false;
@@ -303,13 +349,31 @@ public class Robot extends SampleRobot {
 				climbSpeed += 0.01;
         		climbingMech.set(climbSpeed); //don't know what to set this to
 			}
-        	
-        	// if the POV stick (hat switch) is moved to the forward position, decelerate the climbing mech motor
-        	if (decceraateClimbingMech) {
-        		climbSpeed -= 0.01;
-        		climbingMech.set(climbSpeed);
+//        	
+//        	// if the POV stick (hat switch) is moved to the forward position, decelerate the climbing mech motor
+//        	if (decceraateClimbingMech) {
+//        		climbSpeed -= 0.01;
+//        		climbingMech.set(climbSpeed);
+//        	}
+//        	// boolena for opening the solenoid 
+//        	if (newnewboi) {
+//        		pneumaticOpen();
+//        	}
+//        	// boolean for closing the solenoid 
+//        	if (newnewboi == false){
+//        		pneumaticClose();
+//        	}
+        	//allows toggle for reduced drive 
+        	/*
+        	if (stick.getRawButtonReleased(Reduced)){
+        		speedReduced = !speedReduced;
         	}
-    				
+        	//allows toggle for solenoid 
+        	if (stick.getRawButtonReleased(NewBoi)){
+        		newnewboi = !newnewboi;
+        	}
+        	*/
+    			Scheduler.getInstance().run();
     	    Timer.delay(0.005);		// wait for a motor update time
         }
     }
@@ -321,6 +385,36 @@ public class Robot extends SampleRobot {
     public void test() {
     	System.out.println("test function");
     }
+ 
+    //reference: https://github.com/chopshop-166/frc-2017/blob/master/src/org/usfirst/frc/team166/robot/Robot.java
+    
+  /*  public void selectauto(){
+    	switch(selected){
+	    	case "Autonomous 1":
+	    		this.auto1;
+	    		break;
+	    	case "Autonomous 2":
+	    		this.auto2;
+	    		break;
+	    	case "Autonomous 3":
+	    		this.auto3;
+	    		break;
+	    	case "Autonomous 4":
+	    		this.auto4;
+	    		break;
+	    	case "Autonomous 5":
+	    		this.auto5;
+	    		break;
+	    	case "Autonomous 6":
+	    		this.auto6;
+	    		break;
+	    	default:
+	    		this.auto1;
+	    		break;
+    	}
+    	}
+    */
+    
     
     /**
      * Method to stop drive train motors
@@ -339,8 +433,9 @@ public class Robot extends SampleRobot {
     {
     	// disables all motors and servos on the robot
     	this.stopMotors();
-    	rightGearDoorServo.setDisabled();
-    	leftGearDoorServo.setDisabled();
+//    	rightGearDoorServo.setDisabled();
+//    	leftGearDoorServo.setDisabled();
+    	sol1.set(DoubleSolenoid.Value.kReverse);
     	climbingMech.set(0);
     	System.out.println("I prefer differently abled you ableist");
     }
